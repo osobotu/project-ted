@@ -5,8 +5,12 @@ import pytest
 
 from project_ted.data.fpl_client import (
     FPL_API_BASE_URL,
+    FPL_CONNECT_TIMEOUT_SECONDS,
+    FPL_REQUEST_TIMEOUT_SECONDS,
+    FPL_USER_AGENT,
     FPLClient,
     UnexpectedContentTypeError,
+    create_fpl_http_client,
     utc_now,
 )
 
@@ -183,3 +187,24 @@ def test_known_endpoints_reject_invalid_ids_before_requesting() -> None:
 
         with pytest.raises(ValueError, match="manager_id must be a positive integer"):
             client.get_manager_entry(False)
+
+
+def test_create_fpl_http_client_applies_production_configuration() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.headers["user-agent"] == FPL_USER_AGENT
+        return httpx.Response(200, json={"events": []})
+
+    transport = httpx.MockTransport(handler)
+
+    with create_fpl_http_client(transport=transport) as http_client:
+        response = FPLClient(http_client).get_bootstrap()
+
+        assert http_client.timeout.connect == FPL_CONNECT_TIMEOUT_SECONDS
+        assert http_client.timeout.read == FPL_REQUEST_TIMEOUT_SECONDS
+
+    assert response.payload == b'{"events":[]}'
+
+
+def test_create_fpl_http_client_builds_its_default_transport() -> None:
+    with create_fpl_http_client() as http_client:
+        assert str(http_client.base_url) == FPL_API_BASE_URL

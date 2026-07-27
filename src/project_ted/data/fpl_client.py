@@ -8,6 +8,10 @@ import httpx
 from pydantic import HttpUrl
 
 FPL_API_BASE_URL = "https://fantasy.premierleague.com/api/"
+FPL_USER_AGENT = "project-ted/0.1"
+FPL_CONNECT_RETRIES = 3
+FPL_CONNECT_TIMEOUT_SECONDS = 10.0
+FPL_REQUEST_TIMEOUT_SECONDS = 30.0
 
 type Clock = Callable[[], datetime]
 
@@ -28,6 +32,29 @@ class RawFPLResponse:
 def utc_now() -> datetime:
     """Return the current time in UTC."""
     return datetime.now(UTC)
+
+
+def create_fpl_http_client(
+    *,
+    transport: httpx.BaseTransport | None = None,
+) -> httpx.Client:
+    """Create a consistently configured HTTP client for FPL."""
+
+    resolved_transport = transport
+    if resolved_transport is None:
+        resolved_transport = httpx.HTTPTransport(
+            retries=FPL_CONNECT_RETRIES,
+        )
+
+    return httpx.Client(
+        base_url=FPL_API_BASE_URL,
+        headers={"User-Agent": FPL_USER_AGENT},
+        timeout=httpx.Timeout(
+            FPL_REQUEST_TIMEOUT_SECONDS,
+            connect=FPL_CONNECT_TIMEOUT_SECONDS,
+        ),
+        transport=resolved_transport,
+    )
 
 
 class FPLClient:
