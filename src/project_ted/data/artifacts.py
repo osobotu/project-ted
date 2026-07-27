@@ -1,15 +1,31 @@
 """Contracts and utilities for immutable raw-data artifacts."""
 
 import os
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from hashlib import sha256
 from pathlib import Path, PurePath
 from tempfile import NamedTemporaryFile
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, HttpUrl, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    HttpUrl,
+    ValidationError,
+    field_validator,
+)
 
 PROVENANCE_FILENAME = "provenance.json"
+
+
+class IncompleteArtifactError(RuntimeError):
+    """Raised when an artifact has no completion marker."""
+
+
+class ArtifactIntegrityError(RuntimeError):
+    """Raised when a completed artifact is missing or changed."""
 
 
 class ArtifactProvenance(BaseModel):
@@ -41,6 +57,14 @@ class ArtifactProvenance(BaseModel):
         if value == PROVENANCE_FILENAME:
             raise ValueError("raw_file uses the reserved provenance filename")
         return value
+
+
+@dataclass(frozen=True, slots=True)
+class VerifiedArtifact:
+    """A raw response whose fingerprint has been verified."""
+
+    provenance: ArtifactProvenance
+    payload: bytes
 
 
 def sha256_digest(payload: bytes) -> str:
@@ -117,3 +141,35 @@ def write_raw_artifact(
 
     _fsync_directory(directory)
     return provenance
+
+
+def read_raw_artifact(directory: Path) -> VerifiedArtifact:
+    """Read an artifact only after verifying its provenance and fingerprint."""
+
+    provenance_path = directory / PROVENANCE_FILENAME
+
+    try:
+        provenance_payload = provenance_path.read_bytes()
+    except FileNotFoundError as error:
+        raise IncompleteArtifactError(f"artifact has no completion marker: {directory}") from error
+
+    try:
+        provenance = ArtifactProvenance.model_validate_json(provenance_payload)
+    except ValidationError as error:
+        raise ArtifactIntegrityError(f"artifact has invalid provenance: {directory}") from error
+
+    raw_path = directory / provenance.raw_file
+
+    try:
+        payload = raw_path.read_bytes()
+    except FileNotFoundError as error:
+        raise ArtifactIntegrityError(f"artifact raw file is missing: {raw_path}") from error
+
+    actual_sha256 = sha256_digest(payload)
+    if actual_sha256 != provenance.sha256:
+        raise ArtifactIntegrityError(f"artifact fingerprint does not match: {raw_path}")
+
+    return VerifiedArtifact(
+        provenance=provenance,
+        payload=payload,
+    )
