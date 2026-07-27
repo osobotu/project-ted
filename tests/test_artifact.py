@@ -1,9 +1,16 @@
 from datetime import UTC, datetime, timedelta, timezone
+from pathlib import Path
+from typing import Never
 
 import pytest
 from pydantic import HttpUrl, ValidationError
 
-from project_ted.data.artifacts import ArtifactProvenance, sha256_digest
+from project_ted.data.artifacts import (
+    PROVENANCE_FILENAME,
+    ArtifactProvenance,
+    sha256_digest,
+    write_raw_artifact,
+)
 
 
 def make_provenance(
@@ -43,3 +50,86 @@ def test_provenance_rejects_a_non_utc_timestamp() -> None:
 def test_provenance_rejects_a_nested_raw_file_path() -> None:
     with pytest.raises(ValidationError, match="raw_file must be a filename"):
         make_provenance(raw_file="../bootstrap-static.json")
+
+
+def test_provenance_rejects_the_reserved_filename() -> None:
+    with pytest.raises(ValidationError, match="reserved provenance filename"):
+        make_provenance(raw_file=PROVENANCE_FILENAME)
+
+
+def test_write_raw_artifact_persists_raw_bytes_and_provenance(tmp_path: Path) -> None:
+    artifact_directory = tmp_path / "bootstrap"
+    payload = b'{"events": [], "elements": []}'
+
+    provenance = write_raw_artifact(
+        directory=artifact_directory,
+        raw_file="bootstrap-static.json",
+        payload=payload,
+        source_url=HttpUrl("https://fantasy.premierleague.com/api/bootstrap-static/"),
+        retrieved_at=datetime(2026, 7, 27, 12, tzinfo=UTC),
+        season="2025/26",
+    )
+
+    stored_provenance = ArtifactProvenance.model_validate_json(
+        (artifact_directory / PROVENANCE_FILENAME).read_text()
+    )
+
+    assert (artifact_directory / "bootstrap-static.json").read_bytes() == payload
+    assert stored_provenance == provenance
+    assert provenance.sha256 == sha256_digest(payload)
+
+
+def test_write_raw_artifact_refuses_to_overwrite_a_completed_artifact(
+    tmp_path: Path,
+) -> None:
+    artifact_directory = tmp_path / "bootstrap"
+    original_payload = b'{"version": 1}'
+
+    write_raw_artifact(
+        directory=artifact_directory,
+        raw_file="bootstrap-static.json",
+        payload=original_payload,
+        source_url=HttpUrl("https://fantasy.premierleague.com/api/bootstrap-static/"),
+        retrieved_at=datetime(2026, 7, 27, 12, tzinfo=UTC),
+        season="2025/26",
+    )
+
+    with pytest.raises(FileExistsError, match="artifact already completed"):
+        write_raw_artifact(
+            directory=artifact_directory,
+            raw_file="bootstrap-static.json",
+            payload=b'{"version": 2}',
+            source_url=HttpUrl("https://fantasy.premierleague.com/api/bootstrap-static/"),
+            retrieved_at=datetime(2026, 7, 27, 13, tzinfo=UTC),
+            season="2025/26",
+        )
+
+    assert (artifact_directory / "bootstrap-static.json").read_bytes() == original_payload
+
+
+def test_write_raw_artifact_removes_temporary_file_when_replace_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    artifact_directory = tmp_path / "bootstrap"
+
+    def fail_replace(*_: object) -> Never:
+        raise OSError("simulated replacement failure")
+
+    monkeypatch.setattr(
+        "project_ted.data.artifacts.os.replace",
+        fail_replace,
+    )
+
+    with pytest.raises(OSError, match="simulated replacement failure"):
+        write_raw_artifact(
+            directory=artifact_directory,
+            raw_file="bootstrap-static.json",
+            payload=b'{"events": []}',
+            source_url=HttpUrl("https://fantasy.premierleague.com/api/bootstrap-static/"),
+            retrieved_at=datetime(2026, 7, 27, 12, tzinfo=UTC),
+            season="2025/26",
+        )
+
+    assert list(artifact_directory.iterdir()) == []
+    assert not (artifact_directory / PROVENANCE_FILENAME).exists()
