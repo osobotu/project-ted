@@ -3,6 +3,7 @@ UV_RUN := uv run
 .PHONY: format check dev-check
 
 format:
+	$(UV_RUN) ruff check --fix .
 	$(UV_RUN) ruff format .
 
 check:
