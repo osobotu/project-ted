@@ -8,7 +8,9 @@ authors = [
     { name = "Stephen Oduh" }
 ]
 
-dependencies = []
+dependencies = [
+    "pydantic>=2.13.4",
+]
 
 [build-system]
 requires = ["uv_build>=0.10.11,<0.11.0"]
