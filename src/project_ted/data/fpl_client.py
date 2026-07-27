@@ -1,4 +1,4 @@
-"""Raw HTTP access to the public Fantasy Premier League API"""
+"""Raw HTTP access to the public Fantasy Premier League API."""
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -18,7 +18,7 @@ class UnexpectedContentTypeError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class RawFPLResponse:
-    """A raw FPL response with retrieval metadata"""
+    """A raw FPL response with retrieval metadata."""
 
     source_url: HttpUrl
     retrieved_at: datetime
@@ -40,6 +40,54 @@ class FPLClient:
     def get_bootstrap(self) -> RawFPLResponse:
         """Retrieve players, teams, gameweeks, prices, and availability."""
         return self._get("bootstrap-static/")
+
+    def get_fixtures(self) -> RawFPLResponse:
+        """Retrieve all scheduled fixtures."""
+        return self._get("fixtures/")
+
+    def get_live_gameweek(self, gameweek: int) -> RawFPLResponse:
+        """Retrieve player points for one gameweek."""
+        self._validate_positive_id("gameweek", gameweek)
+        return self._get(f"event/{gameweek}/live/")
+
+    def get_player_summary(self, player_id: int) -> RawFPLResponse:
+        """Retrieve one player's fixtures and history."""
+
+        self._validate_positive_id("player_id", player_id)
+        return self._get(f"element-summary/{player_id}/")
+
+    def get_manager_entry(self, manager_id: int) -> RawFPLResponse:
+        """Retrieve one manager's public entry information."""
+        self._validate_positive_id("manager_id", manager_id)
+        return self._get(f"entry/{manager_id}/")
+
+    def get_manager_history(self, manager_id: int) -> RawFPLResponse:
+        """Retrieve one manager's season history."""
+
+        self._validate_positive_id("manager_id", manager_id)
+        return self._get(f"entry/{manager_id}/history/")
+
+    def get_manager_transfers(self, manager_id: int) -> RawFPLResponse:
+        """Retrieve one manager's complete transfer history."""
+
+        self._validate_positive_id("manager_id", manager_id)
+        return self._get(f"entry/{manager_id}/transfers/")
+
+    def get_manager_picks(
+        self,
+        manager_id: int,
+        gameweek: int,
+    ) -> RawFPLResponse:
+        """Retrieve one manager's picks for one gameweek."""
+
+        self._validate_positive_id("manager_id", manager_id)
+        self._validate_positive_id("gameweek", gameweek)
+        return self._get(f"entry/{manager_id}/event/{gameweek}/picks/")
+
+    @staticmethod
+    def _validate_positive_id(name: str, value: int) -> None:
+        if isinstance(value, bool) or value < 1:
+            raise ValueError(f"{name} must be a positive integer")
 
     def _get(self, endpoint: str) -> RawFPLResponse:
         response = self._http_client.get(
