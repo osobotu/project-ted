@@ -28,17 +28,45 @@ class RunStatus(StrEnum):
 
 
 class GameweekPlan(BaseModel):
+    """A complete team decision for one FPL deadline.
+
+    Live season rules such as squad size, budget, club limits and formations
+    are deliberately validated by PlanningContext rather than duplicated here.
+    """
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    season: str = Field(min_length=1)
-    gameweek: int = Field(gt=0)
-    squad: tuple[PlayerId, ...]
-    starting_xi: tuple[PlayerId, ...]
-    bench: tuple[PlayerId, ...]
-    captain_id: PlayerId
-    vice_captain_id: PlayerId
-    rationale: str = Field(min_length=1)
-    risks: tuple[str, ...] = ()
+    season: str = Field(
+        min_length=1,
+        description="FPL season, such as 2026/27.",
+    )
+    gameweek: int = Field(
+        gt=0,
+        description="Gameweek for which this team will be submitted.",
+    )
+    squad: tuple[PlayerId, ...] = Field(
+        description="All selected FPL player IDs after the decision.",
+    )
+    starting_xi: tuple[PlayerId, ...] = Field(
+        description="Player IDs selected in the starting XI.",
+    )
+    bench: tuple[PlayerId, ...] = Field(
+        description=("Every non-starting squad player in substitution-priority order."),
+    )
+    captain_id: PlayerId = Field(
+        description="Starting player whose points should be doubled.",
+    )
+    vice_captain_id: PlayerId = Field(
+        description="Starting player who replaces an unavailable captain.",
+    )
+    rationale: str = Field(
+        min_length=1,
+        description="Concise explanation of the overall strategy.",
+    )
+    risks: tuple[str, ...] = Field(
+        default=(),
+        description="Material uncertainties that could hurt the plan.",
+    )
 
     @model_validator(mode="after")
     def validate_selections(self) -> Self:
