@@ -1261,11 +1261,14 @@ name = "project-ted"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "anthropic" },
     { name = "httpx" },
     { name = "langchain" },
     { name = "langchain-anthropic" },
     { name = "langchain-openai" },
     { name = "langchain-tavily" },
+    { name = "langsmith" },
+    { name = "openai" },
     { name = "pydantic" },
 ]
 
@@ -1279,11 +1282,14 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "anthropic", specifier = ">=0.122.0" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "langchain", specifier = ">=1.3.15" },
     { name = "langchain-anthropic", specifier = ">=1.4.8" },
     { name = "langchain-openai", specifier = ">=1.4.1" },
     { name = "langchain-tavily", specifier = ">=0.2.18" },
+    { name = "langsmith", specifier = ">=0.11.0" },
+    { name = "openai", specifier = ">=3.1.0" },
     { name = "pydantic", specifier = ">=2.13.4" },
 ]
 

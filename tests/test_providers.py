@@ -4,6 +4,7 @@ import pytest
 from langchain_core.language_models.chat_models import BaseChatModel
 
 import project_ted.providers as provider_module
+from project_ted.planning import AgentProvider
 from project_ted.providers import (
     ProviderConfigurationError,
     create_anthropic_model,
@@ -60,7 +61,9 @@ def test_configures_openai_model(
 
     result = create_openai_model()
 
-    assert result is expected_instance
+    assert result.provider is AgentProvider.OPENAI
+    assert result.model_name == expected_model
+    assert result.chat_model is expected_instance
     assert captured == {
         "model": expected_model,
         "reasoning_effort": "medium",
@@ -135,7 +138,9 @@ def test_configures_anthropic_model(
 
     result = create_anthropic_model()
 
-    assert result is expected_instance
+    assert result.provider is AgentProvider.ANTHROPIC
+    assert result.model_name == expected_model
+    assert result.chat_model is expected_instance
     assert captured == {
         "model_name": expected_model,
         "effort": "medium",
