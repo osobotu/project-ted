@@ -1,0 +1,13 @@
+.PHONY: format check dev-check
+
+format:
+	uv run ruff check --fix .
+	uv run ruff format .
+
+check:
+	uv run ruff check .
+	uv run ruff format --check .
+	uv run mypy
+	uv run pytest
+
+dev-check: format check
