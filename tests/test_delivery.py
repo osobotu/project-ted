@@ -1,4 +1,5 @@
 import json
+from base64 import b64encode
 from datetime import UTC, datetime
 from typing import cast
 from uuid import UUID
@@ -16,6 +17,7 @@ from project_ted.planning import (
     AgentProvider,
     WeeklyRun,
 )
+from project_ted.report import RenderedReport
 
 RESEND_EMAIL_URL = "https://api.resend.com/emails"
 
@@ -44,14 +46,22 @@ def weekly_run() -> WeeklyRun:
             AgentOutcome(
                 provider=AgentProvider.OPENAI,
                 model="gpt-test",
-                error="AgentPlanningError: provider failed",
+                error=("AgentPlanningError: provider failed"),
             ),
             AgentOutcome(
                 provider=AgentProvider.ANTHROPIC,
                 model="claude-test",
-                error="AgentPlanningError: provider failed",
+                error=("AgentPlanningError: provider failed"),
             ),
         ),
+    )
+
+
+def rendered_report() -> RenderedReport:
+    return RenderedReport(
+        markdown=("# Project Ted\n\nWeekly report."),
+        text=("PROJECT TED\n\nWeekly report."),
+        html=("<html><body><h1>Project Ted</h1></body></html>"),
     )
 
 
@@ -64,7 +74,7 @@ def configure_email(
     )
     monkeypatch.setenv(
         "PROJECT_TED_EMAIL_FROM",
-        "Project Ted <onboarding@resend.dev>",
+        ("Project Ted <onboarding@resend.dev>"),
     )
     monkeypatch.setenv(
         "PROJECT_TED_EMAIL_TO",
@@ -72,11 +82,12 @@ def configure_email(
     )
 
 
-def test_sends_the_report_and_returns_the_email_id(
+def test_sends_all_report_representations_and_returns_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     configure_email(monkeypatch)
     run = weekly_run()
+    report = rendered_report()
 
     with respx.mock:
         route = respx.post(RESEND_EMAIL_URL).mock(
@@ -87,7 +98,7 @@ def test_sends_the_report_and_returns_the_email_id(
         )
 
         email_id = send_weekly_report(
-            "# Project Ted\n\nWeekly report.",
+            report,
             run,
         )
 
@@ -105,10 +116,17 @@ def test_sends_the_report_and_returns_the_email_id(
         "project-ted-weekly-12345678-1234-5678-1234-567812345678"
     )
     assert payload == {
-        "from": "Project Ted <onboarding@resend.dev>",
+        "from": ("Project Ted <onboarding@resend.dev>"),
         "to": ["owner@example.com"],
-        "subject": "Project Ted — Gameweek 1 — Failed",
-        "text": "# Project Ted\n\nWeekly report.",
+        "subject": ("Project Ted — Gameweek 1 — Failed"),
+        "text": ("PROJECT TED\n\nWeekly report."),
+        "html": ("<html><body><h1>Project Ted</h1></body></html>"),
+        "attachments": [
+            {
+                "filename": ("project-ted-gameweek-1.md"),
+                "content": b64encode(b"# Project Ted\n\nWeekly report.").decode("ascii"),
+            }
+        ],
     }
 
 
@@ -132,22 +150,43 @@ def test_requires_email_configuration(
         match=f"{variable} is not configured",
     ):
         send_weekly_report(
-            "# Project Ted",
+            rendered_report(),
             weekly_run(),
         )
 
 
-def test_rejects_an_empty_report(
+@pytest.mark.parametrize(
+    "report",
+    [
+        RenderedReport(
+            markdown="",
+            text="text",
+            html="<p>HTML</p>",
+        ),
+        RenderedReport(
+            markdown="# Markdown",
+            text="",
+            html="<p>HTML</p>",
+        ),
+        RenderedReport(
+            markdown="# Markdown",
+            text="text",
+            html="",
+        ),
+    ],
+)
+def test_rejects_an_empty_report_representation(
     monkeypatch: pytest.MonkeyPatch,
+    report: RenderedReport,
 ) -> None:
     configure_email(monkeypatch)
 
     with pytest.raises(
         ValueError,
-        match="report must not be empty",
+        match=("report representations must not be empty"),
     ):
         send_weekly_report(
-            "   ",
+            report,
             weekly_run(),
         )
 
@@ -167,10 +206,10 @@ def test_hides_resend_http_failures(
 
         with pytest.raises(
             EmailDeliveryError,
-            match="Could not send weekly report",
+            match=("Could not send weekly report"),
         ):
             send_weekly_report(
-                "# Project Ted",
+                rendered_report(),
                 weekly_run(),
             )
 
@@ -190,9 +229,9 @@ def test_rejects_an_invalid_resend_response(
 
         with pytest.raises(
             EmailDeliveryError,
-            match="Resend returned an invalid response",
+            match=("Resend returned an invalid response"),
         ):
             send_weekly_report(
-                "# Project Ted",
+                rendered_report(),
                 weekly_run(),
             )

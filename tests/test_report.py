@@ -76,8 +76,16 @@ def planning_context() -> PlanningContext:
             positions=(),
         ),
         teams=(
-            Team(id=1, name="Alpha FC", short_name="AAA"),
-            Team(id=2, name="Beta FC", short_name="BBB"),
+            Team(
+                id=1,
+                name="Alpha FC",
+                short_name="AAA",
+            ),
+            Team(
+                id=2,
+                name="Beta FC",
+                short_name="BBB",
+            ),
         ),
         players=(
             make_player(
@@ -144,7 +152,13 @@ def successful_run() -> WeeklyRun:
         run_id=UUID("12345678-1234-5678-1234-567812345678"),
         season="2026/27",
         gameweek=1,
-        created_at=datetime(2026, 8, 17, 13, tzinfo=UTC),
+        created_at=datetime(
+            2026,
+            8,
+            17,
+            13,
+            tzinfo=UTC,
+        ),
         deadline_at=datetime(
             2026,
             8,
@@ -159,7 +173,7 @@ def successful_run() -> WeeklyRun:
                 model="gpt-test",
                 plan=make_plan(
                     forward_id=4,
-                    rationale="Prioritize midfield captaincy.",
+                    rationale=("Prioritize midfield captaincy."),
                     risks=("Forward A has uncertain minutes.",),
                 ),
             ),
@@ -168,7 +182,7 @@ def successful_run() -> WeeklyRun:
                 model="claude-test",
                 plan=make_plan(
                     forward_id=5,
-                    rationale="Balance price and expected minutes.",
+                    rationale=("Balance price and expected minutes."),
                     risks=(),
                 ),
             ),
@@ -176,45 +190,66 @@ def successful_run() -> WeeklyRun:
     )
 
 
-def test_renders_both_plans_as_a_human_readable_report() -> None:
+def test_renders_both_plans_as_markdown() -> None:
+    report = render_weekly_report(
+        successful_run(),
+        planning_context(),
+    )
+    markdown = report.markdown
+
+    assert markdown.startswith("# Project Ted — Gameweek 1")
+    assert "**Season:** 2026/27" in markdown
+    assert "**Deadline:** 2026-08-21 17:30 UTC" in markdown
+    assert "**Run status:** Succeeded" in markdown
+
+    assert "## OpenAI — gpt-test" in markdown
+    assert "## Anthropic — claude-test" in markdown
+    assert "### Starting XI" in markdown
+    assert "| Midfielder (C) | AAA | MID | £7.5m |" in markdown
+    assert "| Defender (VC) | BBB | DEF | £5.0m |" in markdown
+    assert "| 1 | Forward A | BBB | FWD | £7.0m |" in markdown
+    assert "**Squad cost:** £24.0m" in markdown
+
+    assert "Prioritize midfield captaincy." in markdown
+    assert "- Forward A has uncertain minutes." in markdown
+    assert "- No additional risks supplied." in markdown
+
+    assert "## Agent comparison" in markdown
+    assert "**Shared squad picks:** 3 of 4" in markdown
+    assert "**OpenAI only:** Forward A" in markdown
+    assert "**Anthropic only:** Forward B" in markdown
+
+
+def test_renders_plain_text_and_html() -> None:
     report = render_weekly_report(
         successful_run(),
         planning_context(),
     )
 
-    assert report.startswith("# Project Ted — Gameweek 1")
-    assert "**Season:** 2026/27" in report
-    assert "**Deadline:** 2026-08-21 17:30 UTC" in report
-    assert "**Run status:** Succeeded" in report
+    assert "PROJECT TED — GAMEWEEK 1" in report.text
+    assert "OPENAI — gpt-test" in report.text
+    assert "Midfielder (C) — AAA — £7.5m" in report.text
+    assert "BENCH" in report.text
+    assert "AGENT COMPARISON" in report.text
 
-    assert "## OpenAI — gpt-test" in report
-    assert "## Anthropic — claude-test" in report
-    assert "### Starting XI" in report
-    assert "| Midfielder (C) | AAA | MID | £7.5m |" in report
-    assert "| Defender (VC) | BBB | DEF | £5.0m |" in report
-    assert "| 1 | Forward A | BBB | FWD | £7.0m |" in report
-    assert "**Squad cost:** £24.0m" in report
-
-    assert "Prioritize midfield captaincy." in report
-    assert "- Forward A has uncertain minutes." in report
-    assert "- No additional risks supplied." in report
-
-    assert "## Agent comparison" in report
-    assert "**Shared squad picks:** 3 of 4" in report
-    assert "**OpenAI only:** Forward A" in report
-    assert "**Anthropic only:** Forward B" in report
+    assert report.html.startswith("<!doctype html>")
+    assert "<title>Project Ted — Gameweek 1</title>" in report.html
+    assert "Starting XI" in report.html
+    assert "Midfielder" in report.html
+    assert "Squad cost: £24.0m" in report.html
+    assert "Agent comparison" in report.html
 
 
-def test_renders_a_provider_failure_without_losing_the_other_plan() -> None:
-    successful = successful_run()
-    partial = successful.model_copy(
+def test_renders_a_provider_failure_without_losing_other_plan() -> None:
+    run = successful_run()
+    partial = run.model_copy(
         update={
             "outcomes": (
-                successful.outcomes[0],
+                run.outcomes[0],
                 AgentOutcome(
-                    provider=AgentProvider.ANTHROPIC,
+                    provider=(AgentProvider.ANTHROPIC),
                     model="claude-test",
-                    error="AgentPlanningError: provider failed",
+                    error=("AgentPlanningError: provider failed"),
                 ),
             ),
         }
@@ -225,13 +260,51 @@ def test_renders_a_provider_failure_without_losing_the_other_plan() -> None:
         planning_context(),
     )
 
-    assert "**Run status:** Partial" in report
-    assert "## OpenAI — gpt-test" in report
-    assert "Prioritize midfield captaincy." in report
-    assert "## Anthropic — claude-test" in report
-    assert "**Status:** Failed" in report
-    assert "**Error:** AgentPlanningError: provider failed" in report
-    assert "## Agent comparison" not in report
+    assert "**Run status:** Partial" in report.markdown
+    assert "## OpenAI — gpt-test" in report.markdown
+    assert "Prioritize midfield captaincy." in report.markdown
+    assert "## Anthropic — claude-test" in report.markdown
+    assert "**Status:** Failed" in report.markdown
+    assert "**Error:** AgentPlanningError: provider failed" in report.markdown
+    assert "## Agent comparison" not in report.markdown
+
+    assert "Status: Failed" in report.text
+    assert "AgentPlanningError: provider failed" in report.text
+    assert "AGENT COMPARISON" not in report.text
+
+    assert "AgentPlanningError: provider failed" in report.html
+    assert "Agent comparison" not in report.html
+
+
+def test_html_escapes_external_content() -> None:
+    run = successful_run()
+    unsafe_plan = run.outcomes[0].plan
+
+    assert unsafe_plan is not None
+
+    unsafe_plan = unsafe_plan.model_copy(
+        update={
+            "rationale": ("<script>unsafe()</script>"),
+            "risks": ("Minutes & fitness <unknown>",),
+        }
+    )
+    unsafe_run = run.model_copy(
+        update={
+            "outcomes": (
+                run.outcomes[0].model_copy(update={"plan": unsafe_plan}),
+                run.outcomes[1],
+            )
+        }
+    )
+
+    report = render_weekly_report(
+        unsafe_run,
+        planning_context(),
+    )
+
+    assert "<script>unsafe()</script>" not in report.html
+    assert "&lt;script&gt;unsafe()&lt;/script&gt;" in report.html
+    assert "Minutes &amp; fitness &lt;unknown&gt;" in report.html
 
 
 def test_rejects_a_context_from_another_season() -> None:
@@ -239,7 +312,7 @@ def test_rejects_a_context_from_another_season() -> None:
 
     with pytest.raises(
         ValueError,
-        match="weekly run and planning context must match",
+        match=("weekly run and planning context must match"),
     ):
         render_weekly_report(
             successful_run(),
@@ -269,7 +342,7 @@ def test_rejects_unknown_player_ids() -> None:
 
     with pytest.raises(
         ValueError,
-        match="report cannot resolve player IDs: 999",
+        match=("report cannot resolve player IDs: 999"),
     ):
         render_weekly_report(
             invalid_run,

@@ -10,15 +10,29 @@ from project_ted.app import (
 from project_ted.fpl import PlanningContext
 from project_ted.news import FootballNewsSearch
 from project_ted.planning import WeeklyRun
+from project_ted.report import RenderedReport
 
 
 def test_runs_the_complete_weekly_workflow(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    context = cast(PlanningContext, object())
-    news = cast(FootballNewsSearch, object())
-    weekly_run = cast(WeeklyRun, object())
-    report = "# Project Ted\n\nWeekly report."
+    context = cast(
+        PlanningContext,
+        object(),
+    )
+    news = cast(
+        FootballNewsSearch,
+        object(),
+    )
+    weekly_run = cast(
+        WeeklyRun,
+        object(),
+    )
+    report = RenderedReport(
+        markdown="# Project Ted",
+        text="Project Ted",
+        html="<h1>Project Ted</h1>",
+    )
     events: list[str] = []
 
     def fake_fetch_context() -> PlanningContext:
@@ -41,17 +55,17 @@ def test_runs_the_complete_weekly_workflow(
     def fake_render_report(
         received_run: WeeklyRun,
         received_context: PlanningContext,
-    ) -> str:
+    ) -> RenderedReport:
         assert received_run is weekly_run
         assert received_context is context
         events.append("report")
         return report
 
     def fake_send_report(
-        received_report: str,
+        received_report: RenderedReport,
         received_run: WeeklyRun,
     ) -> str:
-        assert received_report == report
+        assert received_report is report
         assert received_run is weekly_run
         events.append("email")
         return "email_123"
@@ -110,5 +124,6 @@ def test_main_prints_the_delivery_identifier(
     main()
 
     captured = capsys.readouterr()
+
     assert captured.out == ("Project Ted report delivered: email_123\n")
     assert captured.err == ""
