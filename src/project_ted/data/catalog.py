@@ -59,6 +59,9 @@ class CatalogPlayer(BaseModel):
     @field_validator("position", mode="before")
     @classmethod
     def translate_element_type(cls, value: object) -> Position:
+        if isinstance(value, Position):
+            return value
+
         if isinstance(value, bool) or not isinstance(value, int):
             raise ValueError("element_type must be an integer")
 
