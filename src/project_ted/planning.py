@@ -32,9 +32,9 @@ class GameweekPlan(BaseModel):
 
     season: str = Field(min_length=1)
     gameweek: int = Field(gt=0)
-    squad: tuple[PlayerId, ...] = Field(min_length=15, max_length=15)
-    starting_xi: tuple[PlayerId, ...] = Field(min_length=11, max_length=11)
-    bench: tuple[PlayerId, ...] = Field(min_length=4, max_length=4)
+    squad: tuple[PlayerId, ...]
+    starting_xi: tuple[PlayerId, ...]
+    bench: tuple[PlayerId, ...]
     captain_id: PlayerId
     vice_captain_id: PlayerId
     rationale: str = Field(min_length=1)

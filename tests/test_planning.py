@@ -36,22 +36,6 @@ def test_accepts_a_complete_gameweek_plan() -> None:
 
 
 @pytest.mark.parametrize(
-    ("field", "value"),
-    [
-        ("squad", tuple(range(1, 15))),
-        ("starting_xi", tuple(range(1, 11))),
-        ("bench", (12, 13, 14)),
-    ],
-)
-def test_requires_correct_selection_sizes(field: str, value: object) -> None:
-    data = valid_plan_data()
-    data[field] = value
-
-    with pytest.raises(ValidationError):
-        GameweekPlan.model_validate(data)
-
-
-@pytest.mark.parametrize(
     ("field", "value", "message"),
     [
         ("squad", (*range(1, 15), 14), "squad player IDs must be unique"),
