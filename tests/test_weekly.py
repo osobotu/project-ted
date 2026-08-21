@@ -12,7 +12,6 @@ from project_ted.agent import AgentPlanningError
 from project_ted.fpl import (
     Gameweek,
     PlanningContext,
-    SeasonRules,
 )
 from project_ted.news import FootballNewsSearch
 from project_ted.planning import (
@@ -21,6 +20,7 @@ from project_ted.planning import (
     RunStatus,
 )
 from project_ted.providers import ProviderModel
+from project_ted.strategy import season_policy_for
 from project_ted.weekly import run_weekly_planning
 
 
@@ -85,13 +85,7 @@ def planning_context() -> PlanningContext:
                 tzinfo=UTC,
             ),
         ),
-        rules=SeasonRules(
-            squad_size=2,
-            starting_size=2,
-            max_players_per_team=1,
-            budget_tenths=100,
-            positions=(),
-        ),
+        rules=season_policy_for("2026/27"),
         teams=(),
         players=(),
         fixtures=(),

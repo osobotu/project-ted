@@ -11,6 +11,7 @@ from project_ted.planning import (
     RunStatus,
     WeeklyRun,
 )
+from project_ted.strategy import Chip
 
 
 def valid_plan_data() -> dict[str, object]:
@@ -33,6 +34,15 @@ def test_accepts_a_complete_gameweek_plan() -> None:
     assert len(plan.squad) == 15
     assert len(plan.starting_xi) == 11
     assert plan.bench == (12, 13, 14, 15)
+
+
+def test_plan_can_select_a_chip() -> None:
+    data = valid_plan_data()
+    data["chip"] = Chip.TRIPLE_CAPTAIN
+
+    plan = GameweekPlan.model_validate(data)
+
+    assert plan.chip is Chip.TRIPLE_CAPTAIN
 
 
 @pytest.mark.parametrize(

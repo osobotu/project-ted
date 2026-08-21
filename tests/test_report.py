@@ -7,8 +7,6 @@ from project_ted.fpl import (
     Gameweek,
     PlanningContext,
     Player,
-    Position,
-    SeasonRules,
     Team,
 )
 from project_ted.planning import (
@@ -18,6 +16,7 @@ from project_ted.planning import (
     WeeklyRun,
 )
 from project_ted.report import render_weekly_report
+from project_ted.strategy import Position, PositionRule, SeasonPolicy, season_policy_for
 
 
 def make_player(
@@ -52,6 +51,46 @@ def make_player(
     )
 
 
+def report_policy() -> SeasonPolicy:
+    policy_data: dict[str, object] = season_policy_for("2026/27").model_dump()
+
+    policy_data.update(
+        {
+            "squad_size": 4,
+            "starting_size": 3,
+            "max_players_per_team": 3,
+            "positions": (
+                PositionRule(
+                    position=Position.GOALKEEPER,
+                    squad_count=1,
+                    minimum_starters=1,
+                    maximum_starters=1,
+                ),
+                PositionRule(
+                    position=Position.DEFENDER,
+                    squad_count=1,
+                    minimum_starters=1,
+                    maximum_starters=1,
+                ),
+                PositionRule(
+                    position=Position.MIDFIELDER,
+                    squad_count=1,
+                    minimum_starters=1,
+                    maximum_starters=1,
+                ),
+                PositionRule(
+                    position=Position.FORWARD,
+                    squad_count=1,
+                    minimum_starters=0,
+                    maximum_starters=1,
+                ),
+            ),
+        }
+    )
+
+    return SeasonPolicy.model_validate(policy_data)
+
+
 def planning_context() -> PlanningContext:
     return PlanningContext(
         fetched_at=datetime(2026, 8, 17, 12, tzinfo=UTC),
@@ -68,13 +107,7 @@ def planning_context() -> PlanningContext:
                 tzinfo=UTC,
             ),
         ),
-        rules=SeasonRules(
-            squad_size=4,
-            starting_size=3,
-            max_players_per_team=3,
-            budget_tenths=1000,
-            positions=(),
-        ),
+        rules=report_policy(),
         teams=(
             Team(
                 id=1,

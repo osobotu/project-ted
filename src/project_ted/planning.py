@@ -13,6 +13,8 @@ from pydantic import (
     model_validator,
 )
 
+from project_ted.strategy import Chip
+
 PlayerId = Annotated[int, Field(gt=0)]
 
 
@@ -58,6 +60,10 @@ class GameweekPlan(BaseModel):
     )
     vice_captain_id: PlayerId = Field(
         description="Starting player who replaces an unavailable captain.",
+    )
+    chip: Chip | None = Field(
+        default=None,
+        description="FPL chip selected for this gameweek, if any.",
     )
     rationale: str = Field(
         min_length=1,

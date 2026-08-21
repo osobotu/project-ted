@@ -3,12 +3,13 @@
 import re
 from collections import Counter
 from datetime import UTC, datetime
-from enum import StrEnum
+from typing import Self
 
 import httpx
-from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
+from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError, model_validator
 
 from project_ted.planning import GameweekPlan
+from project_ted.strategy import Position, SeasonPolicy, season_policy_for
 
 _BOOTSTRAP_URL = "https://fantasy.premierleague.com/api/bootstrap-static/"
 _FIXTURES_URL = "https://fantasy.premierleague.com/api/fixtures/"
@@ -28,30 +29,6 @@ class InvalidPlanError(ValueError):
 
 class _FrozenModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-
-
-class Position(StrEnum):
-    """FPL playing positions."""
-
-    GOALKEEPER = "GKP"
-    DEFENDER = "DEF"
-    MIDFIELDER = "MID"
-    FORWARD = "FWD"
-
-
-class PositionRule(_FrozenModel):
-    position: Position
-    squad_count: int
-    minimum_starters: int
-    maximum_starters: int
-
-
-class SeasonRules(_FrozenModel):
-    squad_size: int
-    starting_size: int
-    max_players_per_team: int
-    budget_tenths: int
-    positions: tuple[PositionRule, ...]
 
 
 class Gameweek(_FrozenModel):
@@ -116,10 +93,20 @@ class PlanningContext(_FrozenModel):
     fetched_at: datetime
     season: str
     target_gameweek: Gameweek
-    rules: SeasonRules
+    rules: SeasonPolicy
     teams: tuple[Team, ...]
     players: tuple[Player, ...]
     fixtures: tuple[Fixture, ...]
+
+    @model_validator(mode="after")
+    def validate_policy_context(self) -> Self:
+        if self.season != self.rules.season:
+            raise ValueError("planning context and season policy must identify the same season")
+
+        if self.target_gameweek.id > self.rules.total_gameweeks:
+            raise ValueError("target gameweek must be within the season policy")
+
+        return self
 
     def validate_plan(self, plan: GameweekPlan) -> GameweekPlan:
         violations: list[str] = []
@@ -346,6 +333,10 @@ def _build_context(
     if len(next_events) != 1:
         raise ValueError("FPL must identify exactly one next gameweek")
 
+    season = _extract_season(bootstrap.game_config.settings.static_content_url)
+    rules = season_policy_for(season)
+    _verify_bootstrap_rules(bootstrap, rules)
+
     target_event = next_events[0]
     position_by_id = {
         position.id: position.singular_name_short for position in bootstrap.element_types
@@ -353,27 +344,13 @@ def _build_context(
 
     return PlanningContext(
         fetched_at=fetched_at,
-        season=_extract_season(bootstrap.game_config.settings.static_content_url),
+        season=season,
         target_gameweek=Gameweek(
             id=target_event.id,
             name=target_event.name,
             deadline_at=target_event.deadline_time,
         ),
-        rules=SeasonRules(
-            squad_size=bootstrap.game_settings.squad_squadsize,
-            starting_size=bootstrap.game_settings.squad_squadplay,
-            max_players_per_team=(bootstrap.game_settings.squad_team_limit),
-            budget_tenths=(bootstrap.game_settings.squad_total_spend),
-            positions=tuple(
-                PositionRule(
-                    position=position.singular_name_short,
-                    squad_count=position.squad_select,
-                    minimum_starters=position.squad_min_play,
-                    maximum_starters=position.squad_max_play,
-                )
-                for position in bootstrap.element_types
-            ),
-        ),
+        rules=rules,
         teams=tuple(
             Team(
                 id=team.id,
@@ -423,6 +400,55 @@ def _build_context(
             for fixture in fixtures
         ),
     )
+
+
+def _verify_bootstrap_rules(
+    bootstrap: _RawBootstrap,
+    rules: SeasonPolicy,
+) -> None:
+    """Reject live FPL settings that disagree with the verified policy."""
+
+    settings = bootstrap.game_settings
+    live_squad_rules = (
+        settings.squad_squadsize,
+        settings.squad_squadplay,
+        settings.squad_team_limit,
+        settings.squad_total_spend,
+    )
+    verified_squad_rules = (
+        rules.squad_size,
+        rules.starting_size,
+        rules.max_players_per_team,
+        rules.budget_tenths,
+    )
+
+    live_position_rules = {
+        position.singular_name_short: (
+            position.squad_select,
+            position.squad_min_play,
+            position.squad_max_play,
+        )
+        for position in bootstrap.element_types
+    }
+    verified_position_rules = {
+        position.position: (
+            position.squad_count,
+            position.minimum_starters,
+            position.maximum_starters,
+        )
+        for position in rules.positions
+    }
+
+    has_duplicate_live_positions = len(live_position_rules) != len(bootstrap.element_types)
+
+    if (
+        live_squad_rules != verified_squad_rules
+        or live_position_rules != verified_position_rules
+        or has_duplicate_live_positions
+    ):
+        raise ValueError(
+            f"FPL bootstrap rules do not match the verified {rules.season} season policy"
+        )
 
 
 def _extract_season(static_content_url: str) -> str:

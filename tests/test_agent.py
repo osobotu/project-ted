@@ -15,9 +15,6 @@ from project_ted.fpl import (
     Gameweek,
     PlanningContext,
     Player,
-    Position,
-    PositionRule,
-    SeasonRules,
     Team,
 )
 from project_ted.news import (
@@ -26,6 +23,7 @@ from project_ted.news import (
     NewsArticle,
 )
 from project_ted.planning import GameweekPlan
+from project_ted.strategy import Position, PositionRule, SeasonPolicy, season_policy_for
 
 
 class FakeNewsSearch:
@@ -61,6 +59,29 @@ class FakeAgent:
         return self.states[len(self.calls) - 1]
 
 
+def small_policy() -> SeasonPolicy:
+    policy_data: dict[str, object] = season_policy_for("2026/27").model_dump()
+
+    policy_data.update(
+        {
+            "squad_size": 3,
+            "starting_size": 2,
+            "max_players_per_team": 1,
+            "budget_tenths": 150,
+            "positions": (
+                PositionRule(
+                    position=Position.MIDFIELDER,
+                    squad_count=3,
+                    minimum_starters=2,
+                    maximum_starters=2,
+                ),
+            ),
+        }
+    )
+
+    return SeasonPolicy.model_validate(policy_data)
+
+
 def small_context() -> PlanningContext:
     players = tuple(
         Player(
@@ -89,6 +110,7 @@ def small_context() -> PlanningContext:
         for player_id, name in (
             (1, "Alpha"),
             (2, "Beta"),
+            (3, "Gamma"),
         )
     )
 
@@ -107,23 +129,11 @@ def small_context() -> PlanningContext:
                 tzinfo=UTC,
             ),
         ),
-        rules=SeasonRules(
-            squad_size=2,
-            starting_size=2,
-            max_players_per_team=1,
-            budget_tenths=100,
-            positions=(
-                PositionRule(
-                    position=Position.MIDFIELDER,
-                    squad_count=2,
-                    minimum_starters=2,
-                    maximum_starters=2,
-                ),
-            ),
-        ),
+        rules=small_policy(),
         teams=(
             Team(id=1, name="Alpha FC", short_name="ALP"),
             Team(id=2, name="Beta FC", short_name="BET"),
+            Team(id=3, name="Gamma FC", short_name="GAM"),
         ),
         players=players,
         fixtures=(),
@@ -134,9 +144,9 @@ def valid_plan() -> GameweekPlan:
     return GameweekPlan(
         season="2026/27",
         gameweek=1,
-        squad=(1, 2),
+        squad=(1, 2, 3),
         starting_xi=(1, 2),
-        bench=(),
+        bench=(3,),
         captain_id=1,
         vice_captain_id=2,
         rationale="Alpha offers the strongest captaincy option.",
@@ -191,11 +201,11 @@ def test_repairs_a_plan_that_breaks_live_rules(
     invalid_plan = GameweekPlan(
         season="2026/27",
         gameweek=1,
-        squad=(1, 999),
-        starting_xi=(1, 999),
-        bench=(),
+        squad=(1, 2, 999),
+        starting_xi=(1, 2),
+        bench=(999,),
         captain_id=1,
-        vice_captain_id=999,
+        vice_captain_id=2,
         rationale="An invalid first attempt.",
     )
     fake_agent = FakeAgent(
@@ -237,9 +247,9 @@ def test_fails_after_one_bounded_correction(
     invalid_plan = GameweekPlan(
         season="2026/27",
         gameweek=2,
-        squad=(1, 2),
+        squad=(1, 2, 3),
         starting_xi=(1, 2),
-        bench=(),
+        bench=(3,),
         captain_id=1,
         vice_captain_id=2,
         rationale="Wrong gameweek.",

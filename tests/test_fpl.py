@@ -10,13 +10,11 @@ from project_ted.fpl import (
     InvalidPlanError,
     PlanningContext,
     Player,
-    Position,
-    PositionRule,
-    SeasonRules,
     Team,
     fetch_planning_context,
 )
 from project_ted.planning import GameweekPlan
+from project_ted.strategy import Position, season_policy_for
 
 BOOTSTRAP_URL = "https://fantasy.premierleague.com/api/bootstrap-static/"
 FIXTURES_URL = "https://fantasy.premierleague.com/api/fixtures/"
@@ -194,6 +192,35 @@ def test_fetches_one_normalized_planning_context() -> None:
     assert fixture.away_difficulty == 5
 
 
+def test_rejects_bootstrap_rules_that_disagree_with_policy() -> None:
+    payload = bootstrap_payload()
+    game_settings = payload["game_settings"]
+
+    assert isinstance(game_settings, dict)
+
+    game_settings["squad_total_spend"] = 999
+
+    with respx.mock:
+        respx.get(BOOTSTRAP_URL).mock(
+            return_value=httpx.Response(
+                200,
+                json=payload,
+            )
+        )
+        respx.get(FIXTURES_URL).mock(
+            return_value=httpx.Response(
+                200,
+                json=fixtures_payload(),
+            )
+        )
+
+        with pytest.raises(
+            FplDataError,
+            match="Could not load current FPL data",
+        ):
+            fetch_planning_context()
+
+
 def test_hides_http_failures_behind_one_fpl_error() -> None:
     with respx.mock:
         respx.get(BOOTSTRAP_URL).mock(return_value=httpx.Response(503))
@@ -274,38 +301,7 @@ def validation_context(
                 tzinfo=UTC,
             ),
         ),
-        rules=SeasonRules(
-            squad_size=15,
-            starting_size=11,
-            max_players_per_team=3,
-            budget_tenths=1000,
-            positions=(
-                PositionRule(
-                    position=Position.GOALKEEPER,
-                    squad_count=2,
-                    minimum_starters=1,
-                    maximum_starters=1,
-                ),
-                PositionRule(
-                    position=Position.DEFENDER,
-                    squad_count=5,
-                    minimum_starters=3,
-                    maximum_starters=5,
-                ),
-                PositionRule(
-                    position=Position.MIDFIELDER,
-                    squad_count=5,
-                    minimum_starters=2,
-                    maximum_starters=5,
-                ),
-                PositionRule(
-                    position=Position.FORWARD,
-                    squad_count=3,
-                    minimum_starters=1,
-                    maximum_starters=3,
-                ),
-            ),
-        ),
+        rules=season_policy_for("2026/27"),
         teams=tuple(
             Team(
                 id=team_id,
@@ -357,7 +353,7 @@ def test_context_accepts_a_valid_live_plan() -> None:
     assert validation_context().validate_plan(plan) is plan
 
 
-def test_context_uses_downloaded_squad_sizes() -> None:
+def test_context_uses_verified_policy_squad_sizes() -> None:
     plan = live_plan_with(
         squad=tuple(range(1, 15)),
         bench=(2, 7, 12),

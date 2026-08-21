@@ -14,7 +14,6 @@ from project_ted.fpl import (
     InvalidPlanError,
     PlanningContext,
     Player,
-    Position,
     Team,
 )
 from project_ted.news import (
@@ -22,6 +21,7 @@ from project_ted.news import (
     NewsSearchError,
 )
 from project_ted.planning import GameweekPlan
+from project_ted.strategy import Position
 
 _MAX_PLAN_ATTEMPTS = 2
 _RECURSION_LIMIT = 30

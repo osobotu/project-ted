@@ -4,13 +4,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from html import escape
 
-from project_ted.fpl import PlanningContext, Player, Position, Team
+from project_ted.fpl import PlanningContext, Player, Team
 from project_ted.planning import (
     AgentOutcome,
     AgentProvider,
     GameweekPlan,
     WeeklyRun,
 )
+from project_ted.strategy import Position
 
 _PROVIDER_LABEL = {
     AgentProvider.OPENAI: "OpenAI",
